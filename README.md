@@ -8,7 +8,7 @@ The guest has no filesystem, so the host streams each model's weights straight i
 
 ## Build and run
 
-The guest has no build of its own here. `transport-meshing-pen` builds it against the sibling repositories the goal manifest checks out beside it.
+The guest has no build of its own here, and no other repository builds it now. The source is `guest/rfdetr_seg/main.cpp`, and a build has to supply ggml-rd and the frame-pump headers it includes.
 
 ## Licence
 
