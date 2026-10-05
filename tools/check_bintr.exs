@@ -272,7 +272,8 @@ defmodule CheckBintr do
 
   # Godot under a wall clock; the window goes to xvfb on a Linux runner without a display.
   defp godot(env, kind, args, extra_env \\ []) do
-    cmd = [env.engine, "--audio-driver", "Dummy", "--rendering-driver", "opengl3", "--path", @project, "--script", "run_seg.gd", "--"] ++ args
+    driver = if env.host == :linux, do: ["--rendering-driver", "opengl3"], else: []
+    cmd = [env.engine, "--audio-driver", "Dummy"] ++ driver ++ ["--path", @project, "--script", "run_seg.gd", "--"] ++ args
     cmd = if env.xvfb, do: [env.xvfb, "-a" | cmd], else: cmd
     say("$ #{Enum.join(cmd, " ")}")
     port = Port.open({:spawn_executable, hd(cmd)}, [:binary, :exit_status, :stderr_to_stdout, args: tl(cmd),
