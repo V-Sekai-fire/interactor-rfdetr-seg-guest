@@ -1,5 +1,5 @@
 # rfdetr_seg.elf from a clean runner and the goal manifest's sibling checkouts, then run under godot-sandbox's
-# libriscv translated and interpreted on one fixed frame; the vendored graph is checked against its source.
+# libriscv translated and interpreted on macOS on one fixed frame; the vendored graph is checked against its source.
 name: guest
 
 on:
@@ -64,9 +64,10 @@ jobs:
           name: rfdetr_seg-elf
           path: weft/3-interactor/rfdetr-seg-guest/build/rv64/rfdetr_seg.elf
 
+  # On arm64 macOS: an ubuntu-24.04 runner did not finish the interpreted run inside 540 s, nor the translated part inside 10 minutes.
   run:
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: macos-15
     timeout-minutes: 10
     strategy:
       fail-fast: false
@@ -74,14 +75,8 @@ jobs:
         part: [translated, interpreted]
     steps:
       - uses: actions/checkout@v4
-      - name: Tools from apt
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q clang xvfb libgl1-mesa-dri
-      - uses: erlef/setup-beam@v1
-        with:
-          otp-version: "27"
-          elixir-version: "1.17"
+      - name: Elixir
+        run: brew install elixir
       - uses: actions/download-artifact@v4
         with:
           name: rfdetr_seg-elf
