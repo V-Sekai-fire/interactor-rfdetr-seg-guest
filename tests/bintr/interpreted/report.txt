@@ -1,0 +1,11 @@
+elf_sha256 bac9d94a89b998047997635023b62faa05dcfba9ac631bf5e288faad307647e9
+hash 1E5FD1B2
+machine Apple_M2_Pro
+out_sha256 94b4dae9c133a0fbcc65f6639e305c078d76f92297841b2f48cccbcb926ff0c1
+pumps 3253
+rc 0
+reads 3200
+result_bytes 2471600
+translated no
+translated_after no
+vm_ms 327645

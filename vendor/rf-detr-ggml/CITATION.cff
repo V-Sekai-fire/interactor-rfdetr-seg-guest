@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+title: rf-detr-ggml (vendored subset)
+message: >-
+  If you use this code, cite interactor-rf-detr-ggml and RF-DETR.
+abstract: >-
+  The RF-DETR graph that rfdetr_seg.elf runs: ops, the DINOv2 backbone, the
+  projector, deformable attention, the decoder, keypoints and the
+  segmentation head, src/{ops,backbone,projector,deform_attn,decoder,keypoints,segmentation}.{cpp,h},
+  copied byte for byte into src/ here. tools/check_vendor.exs checks every
+  file against the commit below.
+repository-code: https://github.com/V-Sekai-fire/interactor-rf-detr-ggml
+commit: ca2aef72406ccacccae2e3625f3595706459809f
+date-released: 2026-10-05
+authors:
+  - name: V-Sekai-fire
+references:
+  - type: software
+    title: RF-DETR
+    repository-code: https://github.com/roboflow/rf-detr
+    authors:
+      - name: Roboflow

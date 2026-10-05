@@ -1,0 +1,91 @@
+# rfdetr_seg.elf from a clean runner and the goal manifest's sibling checkouts, run translated under godot-sandbox's libriscv
+# on one fixed frame and compared with tests/bintr/interpreted; the vendored graph is checked against its source.
+name: guest
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  SLANG_VERSION: 2026.13.1
+
+jobs:
+  vendor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27"
+          elixir-version: "1.17"
+      - run: elixir tools/check_vendor.exs
+
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: weft/3-interactor/rfdetr-seg-guest
+      - name: Tools from apt
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q clang lld cmake ninja-build python3 spirv-tools
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27"
+          elixir-version: "1.17"
+      - name: slangc
+        run: |
+          mkdir -p "$HOME/opt/slang" "$HOME/bin"
+          curl -fsSL "https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-linux-x86_64.tar.gz" | tar -xz -C "$HOME/opt/slang"
+          ln -sf "$HOME/opt/slang/bin/slangc" "$HOME/bin/slangc"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+      - name: The sibling checkouts, at the goal manifest's paths and revisions
+        working-directory: weft
+        run: |
+          for p in 2-contract/guest-runtime:contract-guest-runtime 2-contract/ggml-rd:contract-ggml-rd \
+                   2-contract/ggml:ggml 5-repository/riscv64-sysroot:repository-riscv64-sysroot; do
+            git clone -q --depth 1 -b main "https://github.com/V-Sekai-fire/${p#*:}" "${p%%:*}"
+            echo "${p%%:*} $(git -C "${p%%:*}" rev-parse HEAD)"
+          done
+      - name: Build rfdetr_seg.elf
+        working-directory: weft/3-interactor/rfdetr-seg-guest
+        run: elixir tools/build.exs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rfdetr_seg-elf
+          path: weft/3-interactor/rfdetr-seg-guest/build/rv64/rfdetr_seg.elf
+
+  # The interpreted run outlasts a 10-minute job on these runners, so it is recorded in tests/bintr/interpreted instead.
+  translated:
+    needs: build
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Elixir
+        run: brew install elixir
+      - uses: actions/download-artifact@v4
+        with:
+          name: rfdetr_seg-elf
+          path: elf
+      - name: rfdetr_seg.elf under libriscv, translated
+        run: elixir tools/check_bintr.exs --elf=elf/rfdetr_seg.elf --part=translated --work=build/bintr
+      - name: Translated against the recorded interpreted run
+        run: elixir tools/check_bintr.exs --compare=build/bintr/translated,tests/bintr/interpreted
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bintr-translated
+          path: |
+            build/bintr/translated/report.txt
+            build/bintr/translated/out.f32
+            build/bintr/translated/godot.log
