@@ -1,5 +1,15 @@
 # interactor-rfdetr-seg-guest
 
-RF-DETR instance segmentation on ggml-rd as a godot-sandbox guest.
+RF-DETR instance segmentation on ggml-rd, built as a sandboxed guest program that the engine host feeds frames and weights.
 
-Split out of `interactor-dress-on` at `310b52e` with its history (`git subtree`). It sits at `3-interactor/rfdetr-seg-guest` in the goal manifest (`contract-manifest-taskweft`), and finds the repositories it builds against as sibling checkouts at their manifest paths. `transport-meshing-pen` builds the guest ELFs (`build.sh`, `tools/build.exs`).
+## What it is for
+
+The guest has no filesystem, so the host streams each model's weights straight into a GPU buffer and pumps frames through it, and the guest returns boxes, class logits and mask logits per frame. RFD 2272 owns the design.
+
+## Build and run
+
+The guest has no build of its own here. `transport-meshing-pen` builds it against the sibling repositories the goal manifest checks out beside it.
+
+## Licence
+
+The licence is not stated.
