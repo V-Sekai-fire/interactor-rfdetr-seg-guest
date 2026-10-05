@@ -8,7 +8,7 @@ The guest has no filesystem, so the host streams each model's weights straight i
 
 ## Build and run
 
-`elixir tools/build.exs` builds `rfdetr_seg.elf` with `contract-guest-runtime`'s shared guest build, against the sibling checkouts the goal manifest places beside this one; the RF-DETR graph is vendored from `interactor-rf-detr-ggml` under `vendor/rf-detr-ggml`. `elixir tools/check_bintr.exs --elf=<rfdetr_seg.elf>` runs it under godot-sandbox with binary translation and without, and compares the two.
+`elixir tools/build.exs` builds `rfdetr_seg.elf` with `contract-guest-runtime`'s shared guest build, against the sibling checkouts the goal manifest places beside this one; the RF-DETR graph is vendored from `interactor-rf-detr-ggml` under `vendor/rf-detr-ggml`. `elixir tools/check_bintr.exs --elf=<rfdetr_seg.elf>` runs it under godot-sandbox with binary translation and without, and compares the two; CI compares its translated run with the interpreted run recorded in `tests/bintr/interpreted`.
 
 ## Licence
 

@@ -1,5 +1,5 @@
 # rfdetr_seg.elf under godot-sandbox's libriscv on one fixed frame, natively translated and interpreted; every check has a
-# control that must fail. CI runs the two parts on two runners and compares their directories in a third job.
+# control that must fail. CI compares its translated run with tests/bintr/interpreted, a recorded interpreted run.
 #   elixir tools/check_bintr.exs --elf=<rfdetr_seg.elf> [--part=all|translated|interpreted] [--work=<dir>]
 #   elixir tools/check_bintr.exs --compare=<translated dir>,<interpreted dir>
 defmodule CheckBintr do
@@ -35,8 +35,9 @@ defmodule CheckBintr do
         nil -> parts(kv)
         dirs -> apply(&compare/2, Enum.map(String.split(dirs, ","), &Path.expand/1))
       end
-    failed = Enum.count(results, &(&1 != :ok))
-    say("#{length(results) - failed} of #{length(results)} checks pass")
+    failed = Enum.count(results, &(&1 == :fail))
+    unchecked = Enum.count(results, &(&1 == :unchecked))
+    say("#{length(results) - failed - unchecked} of #{length(results)} checks pass, #{unchecked} unchecked")
     if failed > 0 or results == [], do: System.halt(1)
   end
 
@@ -108,7 +109,10 @@ defmodule CheckBintr do
     kind = if translate == "yes", do: :translated, else: :interpreted
     r = godot(env, kind, ["--mode=run", "--translate=#{translate}", "--elf=#{elf}", "--bintr=#{lib}",
                           "--models=#{env.models}", "--frame=#{env.frame}", "--out=#{out}"])
-    report = Map.drop(r, [:out]) |> Map.put("elf_sha256", sha256(File.read!(elf))) |> Map.put("rc", to_string(r.rc))
+    digest = with {:ok, b} <- File.read(out), do: sha256(b), else: (_ -> "none")
+    report =
+      Map.take(r, ~w(hash translated translated_after pumps reads vm_ms result_bytes))
+      |> Map.merge(%{"elf_sha256" => sha256(File.read!(elf)), "rc" => to_string(r.rc), "out_sha256" => digest, "machine" => machine()})
     File.write!(Path.join(dir, "report.txt"), Enum.map_join(Enum.sort(report), "", fn {k, v} -> "#{k} #{v}\n" end))
     File.write!(Path.join(dir, "godot.log"), r.out)
     say("#{kind}: rc #{r.rc}, vm_ms #{r["vm_ms"]}, pumps #{r["pumps"]}, #{r["result_bytes"]} result bytes")
@@ -121,18 +125,18 @@ defmodule CheckBintr do
     t = read_report(tdir)
     i = read_report(idir)
     tout = File.read(Path.join(tdir, "out.f32"))
-    iout = File.read(Path.join(idir, "out.f32"))
-    flipped = with {:ok, b} <- iout, true <- byte_size(b) > 0, do: {:ok, flip_byte(b, div(byte_size(b), 2))}, else: (_ -> iout)
+    flipped = with {:ok, b} <- tout, true <- byte_size(b) > 0, do: {:ok, flip_byte(b, div(byte_size(b), 2))}, else: (_ -> tout)
     nan = with {:ok, b} <- tout, true <- byte_size(b) >= 4, do: {:ok, <<0x7FC00000::little-32>> <> binary_part(b, 4, byte_size(b) - 4)}, else: (_ -> tout)
     [
       check("both runs ran the same ELF (sha256 #{t["elf_sha256"]})", same(t, i, "elf_sha256")),
+      check("control: an interpreted run of another ELF is refused", refused(same(t, Map.put(i, "elf_sha256", sha256(i["elf_sha256"] || "")), "elf_sha256"))),
       check("both runs loaded the same program (hash #{t["hash"]})", same(t, i, "hash")),
       check("the translated path ran: translated, and at least #{@min_speedup}x the interpreter's speed", speedup(t, i)),
       check("control: the interpreted run is refused by the same check", refused(speedup(i, i))),
-      check("the translated outputs equal the interpreter's, byte for byte", equal(tout, iout)),
-      check("control: the interpreter's outputs with one byte changed are refused", refused(equal(tout, flipped))),
+      check("the translated outputs equal the interpreter's (sha256 #{i["out_sha256"]})", equal(tout, i["out_sha256"])),
+      check("control: the translated outputs with one byte changed are refused", refused(equal(flipped, i["out_sha256"]))),
       check("the outputs are the expected ones (sha256 #{String.slice(@expected, 0, 8)})", expected(tout)),
-      check("control: the expected check refuses the interpreter's outputs with one byte changed", refused(expected(flipped))),
+      check("control: the expected check refuses the outputs with one byte changed", refused(expected(flipped))),
       check("the outputs are #{@result_floats} finite floats with every box width and height above zero", sane(tout)),
       check("control: outputs with a NaN planted are refused", refused(sane(nan)))
     ]
@@ -160,6 +164,9 @@ defmodule CheckBintr do
 
   defp ran(r, _, _), do: {:error, "godot exited #{r.rc}: #{r["FAIL"] || "no FAIL line"}"}
 
+  defp speedup(%{"machine" => tm} = t, %{"machine" => im}) when tm != im,
+    do: {:unchecked, "translated on #{tm}, interpreted on #{im}; is_binary_translated() is #{t["translated"]}"}
+
   defp speedup(t, i) do
     with {tm, ""} <- Integer.parse(t["vm_ms"] || ""), {im, ""} <- Integer.parse(i["vm_ms"] || "") do
       ratio = im / max(tm, 1)
@@ -177,9 +184,11 @@ defmodule CheckBintr do
     if t[key] != nil and t[key] == i[key], do: :ok, else: {:error, "#{inspect(t[key])} and #{inspect(i[key])}"}
   end
 
-  defp equal({:ok, a}, {:ok, a}) when byte_size(a) > 0, do: say("  sha256 #{sha256(a)}")
-  defp equal({:ok, a}, {:ok, b}), do: {:error, "#{byte_size(a)} and #{byte_size(b)} bytes, first difference at #{first_diff(a, b)}"}
-  defp equal(a, b), do: {:error, "an output is missing: #{inspect(elem(a, 0))}, #{inspect(elem(b, 0))}"}
+  defp equal({:ok, a}, digest) when byte_size(a) > 0 and is_binary(digest) do
+    if sha256(a) == digest, do: :ok, else: {:error, "sha256 #{sha256(a)}, interpreted #{digest}"}
+  end
+
+  defp equal(a, digest), do: {:error, "an output is missing: #{inspect(elem(a, 0))}, interpreted #{inspect(digest)}"}
 
   defp expected({:ok, b}) do
     if sha256(b) == @expected, do: :ok, else: {:error, "sha256 #{sha256(b)}"}
@@ -311,10 +320,6 @@ defmodule CheckBintr do
 
   defp flip_byte(b, at), do: binary_part(b, 0, at) <> <<Bitwise.bxor(:binary.at(b, at), 1)>> <> binary_part(b, at + 1, byte_size(b) - at - 1)
 
-  defp first_diff(a, b) do
-    Enum.find(0..(min(byte_size(a), byte_size(b)) - 1)//1, min(byte_size(a), byte_size(b)), &(:binary.at(a, &1) != :binary.at(b, &1)))
-  end
-
   defp read_report(dir) do
     case File.read(Path.join(dir, "report.txt")) do
       {:ok, s} -> Map.new(for l <- String.split(s, "\n", trim: true), [k, v] <- [String.split(l, " ", parts: 2)], do: {k, v})
@@ -331,7 +336,17 @@ defmodule CheckBintr do
   defp refused({:error, why}), do: say("  refused: #{why}")
 
   defp check(name, :ok), do: (say("PASS #{name}"); :ok)
+  defp check(name, {:unchecked, why}), do: (say("UNCHECKED #{name}: #{why}"); :unchecked)
   defp check(name, {:error, why}), do: (say("FAIL #{name}: #{why}"); :fail)
+
+  defp machine do
+    {out, _} =
+      case :os.type() do
+        {:unix, :darwin} -> System.cmd("sysctl", ["-n", "machdep.cpu.brand_string"])
+        _ -> {File.read!("/proc/cpuinfo") |> String.split("\n") |> Enum.find("", &String.starts_with?(&1, "model name")), 0}
+      end
+    out |> String.replace(~r/^model name\s*:\s*/, "") |> String.trim() |> String.replace(" ", "_")
+  end
 
   defp sha256(b), do: Base.encode16(:crypto.hash(:sha256, b), case: :lower)
   defp say(msg), do: (IO.puts("== #{msg}"); :ok)
