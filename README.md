@@ -8,7 +8,7 @@ The guest has no filesystem, so the host streams each model's weights straight i
 
 ## Build and run
 
-The guest has no build of its own here. `transport-meshing-pen` builds it against the sibling repositories the goal manifest checks out beside it.
+`elixir tools/build.exs` builds `rfdetr_seg.elf` with `contract-guest-runtime`'s shared guest build, against the sibling checkouts the goal manifest places beside this one; the RF-DETR graph is vendored from `interactor-rf-detr-ggml` under `vendor/rf-detr-ggml`. `elixir tools/check_bintr.exs --elf=<rfdetr_seg.elf>` runs it under godot-sandbox with binary translation and without, and compares the two.
 
 ## Licence
 
