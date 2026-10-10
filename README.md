@@ -12,4 +12,4 @@ The guest has no filesystem, so the host streams each model's weights straight i
 
 ## Licence
 
-The licence is not stated.
+MIT. See [LICENSE](LICENSE).
