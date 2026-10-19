@@ -48,13 +48,20 @@ jobs:
           curl -fsSL "https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-linux-x86_64.tar.gz" | tar -xz -C "$HOME/opt/slang"
           ln -sf "$HOME/opt/slang/bin/slangc" "$HOME/bin/slangc"
           echo "$HOME/bin" >> "$GITHUB_PATH"
-      - name: The sibling checkouts, at the goal manifest's paths and revisions
+      - name: The sibling checkouts, at the revisions tests/bintr/interpreted was recorded from
         working-directory: weft
+        # The recorded run pins the ELF's sha256, so a sibling that floats on main breaks the comparison. Move these
+        # together with a fresh recording of tests/bintr/interpreted.
         run: |
-          for p in 2-contract/guest-runtime:contract-guest-runtime 2-contract/ggml-rd:contract-ggml-rd \
-                   2-contract/ggml:ggml 5-repository/riscv64-sysroot:repository-riscv64-sysroot; do
-            git clone -q --depth 1 -b main "https://github.com/V-Sekai-fire/${p#*:}" "${p%%:*}"
-            echo "${p%%:*} $(git -C "${p%%:*}" rev-parse HEAD)"
+          for p in 2-contract/guest-runtime:contract-guest-runtime:65a3c785f4e177aa5943317e6bdb13ff2554ecc2 \
+                   2-contract/ggml-rd:contract-ggml-rd:8361d7c90f20674d7e6b6b615969dc0f33dccc0b \
+                   2-contract/ggml:ggml:29cae86726d8ae2b4d699d8e432fd1bb1801e959 \
+                   5-repository/riscv64-sysroot:repository-riscv64-sysroot:05a47642f334b281f36bfd889e92c8c0bfb5f545; do
+            IFS=: read -r path repo rev <<< "$p"
+            git init -q "$path"
+            git -C "$path" fetch -q --depth 1 "https://github.com/V-Sekai-fire/$repo" "$rev"
+            git -C "$path" checkout -q FETCH_HEAD
+            echo "$path $(git -C "$path" rev-parse HEAD)"
           done
       - name: Build rfdetr_seg.elf
         working-directory: weft/3-interactor/rfdetr-seg-guest
