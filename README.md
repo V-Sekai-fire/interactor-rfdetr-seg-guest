@@ -4,7 +4,7 @@ RF-DETR instance segmentation on ggml-rd, built as a sandboxed guest program tha
 
 ## What it is for
 
-The guest has no filesystem, so the host streams each model's weights straight into a GPU buffer and pumps frames through it, and the guest returns boxes, class logits and mask logits per frame. RFD 2272 owns the design.
+The guest has no filesystem, so the host streams each model's weights straight into a GPU buffer and pumps frames through it, and the guest returns boxes, class logits and mask logits per frame. RFD66606-2272 owns the design.
 
 ## Build and run
 
